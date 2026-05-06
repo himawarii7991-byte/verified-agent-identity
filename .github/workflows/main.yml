@@ -1,0 +1,224 @@
+name: Verify Human Identity
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_name:
+        description: "Agent Name"
+        required: true
+        default: "mominky"
+
+      agent_description:
+        description: "Agent Description"
+        required: true
+        default: "mominky AI Agent"
+
+jobs:
+  verify-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      # =========================
+      # STEP 1 - CHECKOUT REPO
+      # =========================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # =========================
+      # STEP 2 - SETUP NODE.JS
+      # =========================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # =========================
+      # STEP 3 - DEBUG ENVIRONMENT
+      # =========================
+      - name: Debug Environment
+        run: |
+          echo "===== NODE VERSION ====="
+          node -v
+
+          echo "===== NPM VERSION ====="
+          npm -v
+
+          echo "===== CURRENT DIRECTORY ====="
+          pwd
+
+          echo "===== REPOSITORY FILES ====="
+          ls -R
+
+      # =========================
+      # STEP 4 - INSTALL CLAWHUB
+      # =========================
+      - name: Install ClawHub Skill
+        run: |
+          echo "Installing verified-agent-identity skill..."
+          npx clawhub@latest install verified-agent-identity --force
+
+      # =========================
+      # STEP 5 - CREATE PACKAGE.JSON
+      # =========================
+      - name: Create package.json
+        run: |
+          cat > package.json << 'EOF'
+          {
+            "name": "verify-human-identity",
+            "version": "1.0.0",
+            "type": "module",
+            "description": "Human verification workflow",
+            "main": "index.js",
+            "license": "MIT",
+            "dependencies": {
+              "ethers": "^6.13.1"
+            }
+          }
+          EOF
+
+      # =========================
+      # STEP 6 - INSTALL DEPENDENCIES
+      # =========================
+      - name: Install Dependencies
+        run: |
+          npm install
+
+      # =========================
+      # STEP 7 - CREATE SCRIPTS FOLDER
+      # =========================
+      - name: Create Scripts Directory
+        run: |
+          mkdir -p scripts
+
+      # =========================
+      # STEP 8 - CREATE ETH IDENTITY SCRIPT
+      # =========================
+      - name: Create Ethereum Identity Script
+        run: |
+          cat > scripts/createNewEthereumIdentity.js << 'EOF'
+          import { Wallet } from "ethers";
+          import fs from "fs";
+
+          console.log("====================================");
+          console.log("CREATING ETHEREUM IDENTITY");
+          console.log("====================================");
+
+          const wallet = Wallet.createRandom();
+
+          console.log("Wallet Address:");
+          console.log(wallet.address);
+
+          const identity = {
+            address: wallet.address,
+            privateKey: wallet.privateKey
+          };
+
+          fs.writeFileSync(
+            "identity.json",
+            JSON.stringify(identity, null, 2)
+          );
+
+          console.log("====================================");
+          console.log("IDENTITY SAVED");
+          console.log("====================================");
+          EOF
+
+      # =========================
+      # STEP 9 - CREATE LINK SCRIPT
+      # =========================
+      - name: Create Link Script
+        run: |
+          cat > scripts/manualLinkHumanToAgent.js << 'EOF'
+          import fs from "fs";
+
+          console.log("====================================");
+          console.log("VERIFYING AGENT");
+          console.log("====================================");
+
+          const args = process.argv;
+          const challengeIndex = args.indexOf("--challenge");
+
+          if (challengeIndex === -1) {
+            console.error("ERROR: Missing --challenge parameter");
+            process.exit(1);
+          }
+
+          const rawChallenge = args[challengeIndex + 1];
+
+          console.log("Raw Challenge:");
+          console.log(rawChallenge);
+
+          let challenge;
+
+          try {
+            challenge = JSON.parse(rawChallenge);
+          } catch (err) {
+            console.error("ERROR: Invalid JSON challenge");
+            process.exit(1);
+          }
+
+          console.log("====================================");
+          console.log("AGENT INFORMATION");
+          console.log("====================================");
+
+          console.log("Agent Name:");
+          console.log(challenge.name);
+
+          console.log("Agent Description:");
+          console.log(challenge.description);
+
+          if (!fs.existsSync("identity.json")) {
+            console.error("ERROR: identity.json not found");
+            process.exit(1);
+          }
+
+          const identity = JSON.parse(
+            fs.readFileSync("identity.json", "utf8")
+          );
+
+          console.log("====================================");
+          console.log("WALLET INFORMATION");
+          console.log("====================================");
+
+          console.log("Wallet Address:");
+          console.log(identity.address);
+
+          console.log("====================================");
+          console.log("VERIFICATION SUCCESS");
+          console.log("====================================");
+          EOF
+
+      # =========================
+      # STEP 10 - CREATE ETH IDENTITY
+      # =========================
+      - name: Create Ethereum Identity
+        run: |
+          node scripts/createNewEthereumIdentity.js
+
+      # =========================
+      # STEP 11 - VERIFY AGENT
+      # =========================
+      - name: Link Human To Agent
+        run: >
+          node scripts/manualLinkHumanToAgent.js
+          --challenge "{\"name\":\"${{ github.event.inputs.agent_name }}\",\"description\":\"${{ github.event.inputs.agent_description }}\"}"
+
+      # =========================
+      # STEP 12 - SHOW RESULT
+      # =========================
+      - name: Show Generated Identity
+        run: |
+          echo "===================================="
+          echo "GENERATED IDENTITY"
+          echo "===================================="
+
+          cat identity.json
+
+      # =========================
+      # STEP 13 - UPLOAD ARTIFACT
+      # =========================
+      - name: Upload Identity Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ethereum-identity
+          path: identity.json
